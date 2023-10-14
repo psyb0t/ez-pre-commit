@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# Define where the .git/hooks dir is
+HOOKS_DIR=".git/hooks"
+# Define pre-commit file
+PRE_COMMIT_FILE="$HOOKS_DIR/pre-commit"
+# Define backup pre-commit file
+BACKUP_PRE_COMMIT="$HOOKS_DIR/pre-commit.backup"
+
+# Logging
+log() {
+  echo "[LOG] $1"
+}
+
+# Function to install the pre-commit hook
+install_hook() {
+  log "Attempting to install pre-commit hook."
+
+  # Check if pre-commit file already exists
+  if [ -f "$PRE_COMMIT_FILE" ]; then
+    log "Found existing pre-commit file. Backing it up."
+    # Rename to backup
+    mv "$PRE_COMMIT_FILE" "$BACKUP_PRE_COMMIT"
+  fi
+
+  # Create pre-commit file using a string block
+  PRE_COMMIT_CONTENTS=$(cat <<- EOM
+	#!/bin/bash
+	ROOT_DIR="\$(git rev-parse --show-toplevel)"
+	PRE_COMMIT_SH="\$ROOT_DIR/pre-commit.sh"
+	if [ ! -f "\$PRE_COMMIT_SH" ]; then
+	  echo "pre-commit.sh not found."
+	  exit 1
+	fi
+	if [ ! -x "\$PRE_COMMIT_SH" ]; then
+	  echo "pre-commit.sh found but not executable."
+	  exit 1
+	fi
+	"\$PRE_COMMIT_SH"
+	if [ \$? -ne 0 ]; then
+	  echo "pre-commit.sh failed. Commit aborted."
+	  exit 1
+	fi
+	EOM
+  )
+
+  echo "$PRE_COMMIT_CONTENTS" > "$PRE_COMMIT_FILE"
+
+  # Make pre-commit file executable
+  chmod +x "$PRE_COMMIT_FILE"
+  log "Pre-commit hook installed successfully."
+}
+
+# Function to uninstall pre-commit hook
+uninstall_hook() {
+  log "Attempting to uninstall pre-commit hook."
+
+  # Check if pre-commit file exists
+  if [ -f "$PRE_COMMIT_FILE" ]; then
+    log "Removing existing pre-commit file."
+    rm -f "$PRE_COMMIT_FILE"
+  else
+    log "No pre-commit file found. Nothing to remove."
+  fi
+
+  # Restore the backup if it exists
+  if [ -f "$BACKUP_PRE_COMMIT" ]; then
+    log "Restoring backup pre-commit file."
+    mv "$BACKUP_PRE_COMMIT" "$PRE_COMMIT_FILE"
+  else
+    log "No backup found. Nothing to restore."
+  fi
+
+  log "Pre-commit hook uninstalled successfully."
+}
+
+# Check for install or uninstall command
+if [ "$1" == "install" ]; then
+  install_hook
+elif [ "$1" == "uninstall" ]; then
+  uninstall_hook
+else
+  log "Usage: $0 {install|uninstall}"
+fi
