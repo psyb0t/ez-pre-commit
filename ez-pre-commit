@@ -1,85 +1,116 @@
 #!/bin/bash
 
+SCRIPT_NAME="ez-pre-commit"
+
+# Define the root directory of the git repository
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+if [ -z "$ROOT_DIR" ]; then
+	echo "Can't find the damn root directory of your git repo. Are you even in one?"
+	exit 1
+fi
+
+# Define the pre-commit script location at the git root
+PRE_COMMIT_SH="$ROOT_DIR/pre-commit.sh"
 # Define where the .git/hooks dir is
-HOOKS_DIR=".git/hooks"
+HOOKS_DIR="$ROOT_DIR/.git/hooks"
 # Define pre-commit file
 PRE_COMMIT_FILE="$HOOKS_DIR/pre-commit"
 # Define backup pre-commit file
 BACKUP_PRE_COMMIT="$HOOKS_DIR/pre-commit.backup"
 
-# Logging
+# Logging function
 log() {
-  echo "[LOG] $1"
+	echo "[LOG] $1"
 }
 
-# Function to install the pre-commit hook
+# Error handling function
+error() {
+	echo "[ERROR] $1" >&2
+	exit 1
+}
+
+# Check if the pre-commit script exists, if not, create it
+create_pre_commit_script() {
+	if [ ! -f "$PRE_COMMIT_SH" ]; then
+		log "That pre-commit script is MIA. Time to draft it."
+		cat >"$PRE_COMMIT_SH" <<-'EOM'
+			#!/bin/bash
+			echo "Modify this script to include your pre-commit checks."
+			exit 1
+		EOM
+		chmod +x "$PRE_COMMIT_SH" || error "Couldn't arm $PRE_COMMIT_SH. Make it executable."
+		log "Edit $PRE_COMMIT_SH before you start committing, capisce?"
+	else
+		log "Pre-commit script's already there, chill."
+	fi
+}
+
+# Install the pre-commit hook
 install_hook() {
-  log "Attempting to install pre-commit hook."
+	log "Droppin' the pre-commit hook into place."
 
-  # Check if pre-commit file already exists
-  if [ -f "$PRE_COMMIT_FILE" ]; then
-    log "Found existing pre-commit file. Backing it up."
-    # Rename to backup
-    mv "$PRE_COMMIT_FILE" "$BACKUP_PRE_COMMIT"
-  fi
+	create_pre_commit_script
 
-  # Create pre-commit file using a string block
-  PRE_COMMIT_CONTENTS=$(
-    cat <<-EOM
-	#!/bin/bash
-	ROOT_DIR="\$(git rev-parse --show-toplevel)"
-	PRE_COMMIT_SH="\$ROOT_DIR/pre-commit.sh"
-	if [ ! -f "\$PRE_COMMIT_SH" ]; then
-	  echo "pre-commit.sh not found."
-	  exit 1
+	if [ -f "$PRE_COMMIT_FILE" ]; then
+		log "Found a pre-commit hook already squatting. Gonna back it up."
+		mv "$PRE_COMMIT_FILE" "$BACKUP_PRE_COMMIT" || error "Backup failed. This ain't good, aborting."
 	fi
-	if [ ! -x "\$PRE_COMMIT_SH" ]; then
-	  echo "pre-commit.sh found but not executable."
-	  exit 1
-	fi
-	"\$PRE_COMMIT_SH"
-	if [ \$? -ne 0 ]; then
-	  echo "pre-commit.sh failed. Commit aborted."
-	  exit 1
-	fi
+
+	cat >"$PRE_COMMIT_FILE" <<-EOM
+		#!/bin/bash
+		ROOT_DIR="\$(git rev-parse --show-toplevel)"
+		PRE_COMMIT_SH="\$ROOT_DIR/pre-commit.sh"
+
+		if [ ! -f "\$PRE_COMMIT_SH" ]; then
+				echo "[$SCRIPT_NAME] The pre-commit script has ghosted us. Something's wrong."
+				exit 1
+		fi
+
+		if [ ! -x "\$PRE_COMMIT_SH" ]; then
+				echo "[$SCRIPT_NAME] Your pre-commit script ain't ready to rumble. Make it executable."
+				exit 1
+		fi
+
+		"\$PRE_COMMIT_SH"
+		RESULT=\$?
+		if [ \$RESULT -ne 0 ]; then
+				echo "[$SCRIPT_NAME] Your pre-commit script is throwing a fit. Sort it out."
+				exit \$RESULT
+		fi
 	EOM
-  )
 
-  echo "$PRE_COMMIT_CONTENTS" >"$PRE_COMMIT_FILE"
-
-  # Make pre-commit file executable
-  chmod +x "$PRE_COMMIT_FILE"
-  log "Pre-commit hook installed successfully."
+	chmod +x "$PRE_COMMIT_FILE" || error "The pre-commit hook isn't getting with the program. Couldn't make it executable."
+	log "Pre-commit hook is all set and ready to rock."
 }
 
-# Function to uninstall pre-commit hook
+# Uninstall the pre-commit hook
 uninstall_hook() {
-  log "Attempting to uninstall pre-commit hook."
+	log "Ripping out the pre-commit hook."
 
-  # Check if pre-commit file exists
-  if [ -f "$PRE_COMMIT_FILE" ]; then
-    log "Removing existing pre-commit file."
-    rm -f "$PRE_COMMIT_FILE"
-  else
-    log "No pre-commit file found. Nothing to remove."
-  fi
+	if [ -f "$PRE_COMMIT_FILE" ]; then
+		rm -f "$PRE_COMMIT_FILE" || error "Something's wonky. Couldn't nuke the pre-commit hook."
+	else
+		log "No pre-commit hook to uninstall. It's all clean here."
+	fi
 
-  # Restore the backup if it exists
-  if [ -f "$BACKUP_PRE_COMMIT" ]; then
-    log "Restoring backup pre-commit file."
-    mv "$BACKUP_PRE_COMMIT" "$PRE_COMMIT_FILE"
-  else
-    log "No backup found. Nothing to restore."
-  fi
+	if [ -f "$BACKUP_PRE_COMMIT" ]; then
+		mv "$BACKUP_PRE_COMMIT" "$PRE_COMMIT_FILE" || error "Backup's being a diva. Couldn't move it back."
+	else
+		log "Backup's AWOL. Nothing to restore."
+	fi
 
-  log "Pre-commit hook uninstalled successfully."
+	log "Pre-commit hook's outta there. Like it never happened."
 }
 
-# Check for install or uninstall command
-if [ "$1" == "install" ]; then
-  install_hook
-elif [ "$1" == "uninstall" ]; then
-  uninstall_hook
-else
-  echo "Usage: $0 {install|uninstall}"
-fi
+# Command decision tree
+case "$1" in
+install)
+	install_hook
+	;;
+uninstall)
+	uninstall_hook
+	;;
+*)
+	error "Usage: $0 {install|uninstall}"
+	;;
+esac
