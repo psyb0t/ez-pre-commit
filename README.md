@@ -1,10 +1,11 @@
 # ez-pre-commit
 
-A simple bash script to manage your pre-commit hooks in a Git repository. This script creates a pre-commit hook file in your `.git/hooks` directory and checks for the existence of a `pre-commit.sh` script in the root of your repository. If the script exists and is executable, it runs it before each commit.
+A simple bash script to manage your pre-commit hooks in a Git repository. This script creates a pre-commit hook file in your `.git/hooks` directory that checks for the existence of a `pre-commit.sh` script in the root of your repository. If the script exists and is executable, it runs it before each commit. Otherwise it yells for dear life. The `pre-commit.sh` script skeleton is placed upon installation so use that one and don't delete it.
 
 ## Features
 
 - Installs a new pre-commit hook, backs up existing one if present
+- Installs the `pre-commit.sh` script skeleton in the root of your repository
 - Uninstalls the pre-commit hook and restores backup if available
 - Logs every damn thing
 
